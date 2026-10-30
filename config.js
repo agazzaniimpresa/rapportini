@@ -1,9 +1,9 @@
 // MODIFICA SOLO QUESTE DUE RIGHE (vedi ISTRUZIONI.md, punti 5 e 6)
 window.APP_CONFIG = {
   // Indirizzo dell'app web di Apps Script (finisce con /exec)
-  API_URL: 'INCOLLA_QUI_L_URL_DELL_APP_WEB_APPS_SCRIPT/exec',
+  API_URL: 'https://script.google.com/macros/s/AKfycbzCwtym_AMPF8_YXSe3YRc5vl0_ly93jFl6egqeWS64iMzBtSfmzqsnDqyjiilb6BP5/exec',
   // ID client OAuth di Google Cloud (finisce con .apps.googleusercontent.com)
-  GOOGLE_CLIENT_ID: 'INCOLLA_QUI_L_ID_CLIENT.apps.googleusercontent.com',
+  GOOGLE_CLIENT_ID: '937783269854-m0b0fbm7m8hfuovj3f0q2jp8u6idl1f1.apps.googleusercontent.com',
 
   // Riduzione delle foto prima del caricamento
   FOTO: {
