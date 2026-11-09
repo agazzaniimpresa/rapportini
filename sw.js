@@ -1,6 +1,6 @@
 // Service worker: l'app si apre anche senza connessione.
 // Se pubblichi una nuova versione dei file, cambia il numero qui sotto.
-const VERSIONE_CACHE = 'rapportini-v4.0.0';
+const VERSIONE_CACHE = 'rapportini-v5.0.0';
 const FILE = ['./', 'index.html', 'app.js', 'style.css', 'config.js', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png', 'icon-maskable-512.png'];
 
 self.addEventListener('install', e => {
