@@ -1,13 +1,13 @@
 {
   "name": "Rapportini di lavoro",
   "short_name": "Rapportini",
-  "description": "Rapportini, foto, clienti e ferie",
+  "description": "Calendario lavori, rapportini, foto, documenti, clienti e ferie",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
   "orientation": "portrait",
   "background_color": "#ffffff",
-  "theme_color": "#1b6b3a",
+  "theme_color": "#1d4ed8",
   "lang": "it",
   "icons": [
     { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
