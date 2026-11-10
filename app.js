@@ -8,9 +8,9 @@ const DEF = {
 const CFG = Object.assign({}, window.APP_CONFIG || {});
 CFG.FOTO = Object.assign({}, DEF.FOTO, CFG.FOTO || {});
 CFG.DOC = Object.assign({}, DEF.DOC, CFG.DOC || {});
-CFG.VERSIONE = '5.0.0';                        // la versione è quella dell'app, non quella scritta in config.js
-const VERSIONE_API_MIN = 5;
-const S = { utente: null, dati: null, anag: [], vociBase: [], vociAltro: [], coda: [], token: null, tokenExp: 0, pila: [], tk: 0,
+CFG.VERSIONE = '5.1.0';                        // la versione è quella dell'app, non quella scritta in config.js
+const serverVecchio = () => { const v = String((S.dati && S.dati.versioneApi) || '0').split('.').map(Number); return v[0] < 5 || (v[0] === 5 && (v[1] || 0) < 1); };
+const S = { utente: null, dati: null, anag: [], vociBase: [], vociAltro: [], condivise: [], coda: [], token: null, tokenExp: 0, pila: [], tk: 0,
   cal: { giorno: null, utente: '' }, tmp: {}, risultati: {}, filtroBozze: '' };
 
 // ============================================================ UTILITÀ
@@ -217,6 +217,7 @@ async function caricaAnagrafica() { S.anag = await chiama('anagrafica'); await D
 async function aggiornaVoci() {
   const d = await chiama('calendario', {});
   S.vociBase = d.voci; await DB.putKV('vociBase', d.voci);
+  S.condivise = d.condivise || []; await DB.putKV('condivise', S.condivise);
   return d.voci;
 }
 
@@ -313,7 +314,9 @@ function applicaCoda(base, coda) {
       if ((p.perConto && p.perConto !== io) || per(it.id)) return;
       const l = lavInfo(p.lavoro);
       out.push({ id: it.id, data: p.data, utente: io, lavoro: p.lavoro, cliente: l.cliente, nome: l.nome, stato: 'PROGRAMMATO', inizio: '', fine: '', ore: 0,
-        origine: 'CALENDARIO', chiusura: '', scadenzaTs: 0, scadenza: '', tipo: 'CANTIERE', veicolo: '', materiali: '', costoMat: '', noleggio: false, costoNol: '', note: '', mancanti: [], locale: true });
+        origine: 'CALENDARIO', chiusura: '', scadenzaTs: 0, scadenza: '', tipo: 'CANTIERE', veicolo: '', materiali: '', costoMat: '', noleggio: false, costoNol: '', note: '', mancanti: [], locale: true, visibileA: visTesto(p.visibileA) });
+    } else if (it.tipo === 'calVisibilita') {
+      const v = per(p.voce); if (v) v.visibileA = visTesto(p.visibileA);
     } else if (it.tipo === 'calElimina') {
       const i = out.findIndex(v => v.id === p.voce); if (i >= 0) out.splice(i, 1);
     } else if (it.tipo === 'calInizio') {
@@ -350,6 +353,9 @@ function applicaCoda(base, coda) {
   out.forEach(v => { if (v.stato === 'BOZZA') v.mancanti = mancantiBozza(v); });
   return out;
 }
+/** visibilità: '' (solo io) | '*' (tutti) | elenco di nomi -> testo come sul server */
+const visTesto = x => (x === '*' ? '*' : [].concat(x || []).filter(Boolean).join(';'));
+const descVis = x => { const t = visTesto(x); return t === '' ? 'solo tu' : t === '*' ? 'tutti gli utenti' : t.split(';').join(', '); };
 const vociOwn = () => applicaCoda(S.vociBase, S.coda);
 const vociVisibili = () => (S.cal.utente ? S.vociAltro : vociOwn());
 function trovaVoce(id) { return vociOwn().find(v => v.id === id) || S.vociAltro.find(v => v.id === id) || null; }
@@ -439,9 +445,9 @@ function vistaLogin(messaggio) {
 }
 async function esci() {
   if (!(await modale('Uscire?', 'I dati non ancora inviati restano sul telefono.', [{ t: 'Esci', v: true }, { t: 'Annulla', v: false, classe: 'sec' }]))) return;
-  S.token = null; S.tokenExp = 0; S.utente = null; S.dati = null; S.vociBase = []; S.anag = [];
+  S.token = null; S.tokenExp = 0; S.utente = null; S.dati = null; S.vociBase = []; S.condivise = []; S.anag = [];
   scrivi('tk', null);
-  await DB.delKV('sessione'); await DB.delKV('vociBase'); await DB.delKV('anagrafica');
+  await DB.delKV('sessione'); await DB.delKV('vociBase'); await DB.delKV('condivise'); await DB.delKV('anagrafica');
   try { if (googlePronto()) google.accounts.id.disableAutoSelect(); } catch (e) { /* ignora */ }
   S.pila = [];
   vistaLogin();
@@ -455,13 +461,13 @@ function vistaHome() {
   const inCorso = vociOwn().find(v => v.stato === 'IN_CORSO');
   const scaduta = !tokenValido();
   const bottoneAccesso = h('div', { style: 'margin-top:8px' });
-  const vecchioServer = S.dati && parseInt(S.dati.versioneApi, 10) < VERSIONE_API_MIN;
+  const vecchioServer = S.dati && serverVecchio();
   mostra('Rapportini', [
     h('div', { class: 'hero' }, h('small', {}, giornoLungo(oggi)), h('b', {}, 'Ciao ' + (S.utente ? S.utente.nome : '') + (S.utente && S.utente.ruolo === 'MASTER' ? ' · master' : '')),
       h('div', { class: 'sint' }, h('span', {}, voci.length + (voci.length === 1 ? ' lavoro oggi' : ' lavori oggi')),
         inCorso ? h('span', {}, '● in corso: ' + (inCorso.cliente || inCorso.lavoro)) : null,
         nBozze ? h('span', {}, nBozze + (nBozze === 1 ? ' bozza da completare' : ' bozze da completare')) : null)),
-    vecchioServer ? h('div', { class: 'banner errore' }, 'Il server (Apps Script) non è aggiornato alla versione 5: ripubblica il codice come da istruzioni.') : null,
+    vecchioServer ? h('div', { class: 'banner errore' }, 'Il server (Apps Script) non è aggiornato alla versione 5.1: ripubblica il codice come da istruzioni.') : null,
     scaduta && navigator.onLine ? h('div', { class: 'banner' }, 'Sessione scaduta: accedi di nuovo per inviare i dati.', bottoneAccesso) : null,
     h('div', { class: 'griglia' },
       tile('calendario', 'Calendario lavori', () => vai(vistaCalendario)),
@@ -500,6 +506,7 @@ function disegnaCalendario() {
   const tutte = vociVisibili().filter(v => v.utente === (S.cal.utente || S.utente.nome));
   const delGiorno = tutte.filter(v => v.data === dG).sort(ordina);
   const aperte = eOggi ? tutte.filter(v => v.stato === 'IN_CORSO' && v.data !== dG) : [];
+  const condDelGiorno = mio ? S.condivise.filter(v => v.data === dG).sort(ordina) : [];
   const oreTot = r2(delGiorno.filter(v => v.stato === 'BOZZA' || v.stato === 'INVIATO').reduce((t, v) => t + (v.ore || 0), 0));
   const selUtente = master ? h('select', { onchange: async e => {
     S.cal.utente = e.target.value;
@@ -517,7 +524,8 @@ function disegnaCalendario() {
     eOggi ? null : h('button', { class: 'sec', style: 'margin-top:6px', onclick: () => { S.cal.giorno = oggi; disegnaCalendario(); } }, 'Torna a oggi'),
     aperte.length ? h('div', { class: 'banner' }, 'Lavoro ancora in corso da un altro giorno: toccalo per registrare la fine.') : null,
     aperte.map(cartaVoce),
-    delGiorno.length ? delGiorno.map(cartaVoce) : (aperte.length ? null : vuoto('calendario', 'Nessun lavoro in programma per questo giorno.')),
+    delGiorno.length ? delGiorno.map(cartaVoce) : (aperte.length || condDelGiorno.length ? null : vuoto('calendario', 'Nessun lavoro in programma per questo giorno.')),
+    condDelGiorno.length ? [h('h3', { class: 'sez-cond' }, 'Programma condiviso da altri utenti'), condDelGiorno.map(cartaCondivisa)] : null,
     oreTot > 0 ? h('div', { class: 'totale-giorno' }, h('span', {}, 'Ore registrate nel giorno'), h('span', {}, oreIT(oreTot) + ' h')) : null,
     puoAggiungere ? h('button', { class: 'pieno', onclick: () => apriAggiungi(g) }, ico('plus'), 'Aggiungi cliente / lavoro') : null,
     h('p', { class: 'aiuto centro', style: 'margin-top:14px' }, 'Il calendario è solo dell\'app: non usa né modifica Google Calendar. I tasti di inizio e fine lavoro si attivano solo nella giornata in corso.')
@@ -532,7 +540,47 @@ function cartaVoce(v) {
     h('div', { class: 'testa' }, h('b', {}, v.cliente || v.lavoro), chip(v.stato)),
     v.nome ? h('div', { class: 'sub' }, v.nome + (v.origine === 'SOPRALLUOGO' ? ' · sopralluogo' : '')) : null,
     h('div', { class: 'tempo' }, tempo),
+    v.visibileA ? h('div', { class: 'vis' }, 'Visibile a: ' + descVis(v.visibileA)) : null,
     v.stato === 'BOZZA' && v.mancanti && v.mancanti.length ? h('div', { class: 'man' }, 'Da completare: ' + v.mancanti.join(', ')) : null);
+}
+/** Attività di un altro utente resa visibile a me: sola lettura */
+function cartaCondivisa(v) {
+  let tempo = v.stato === 'PROGRAMMATO' ? 'Da avviare' : v.stato === 'IN_CORSO' ? 'In corso dalle ' + v.inizio : v.inizio + ' → ' + v.fine + ' · ' + oreIT(v.ore) + ' h';
+  return h('button', { class: 'voce condivisa s-' + v.stato.toLowerCase(), onclick: () => sheet(v.cliente || v.lavoro, (v.nome ? v.nome + ' · ' : '') + v.data,
+    h('div', {}, h('div', { class: 'banner info' }, 'Programma di ' + v.utente + ': puoi solo consultarlo. Per registrare il tuo lavoro su questo cliente aggiungilo al tuo calendario.'),
+      h('button', { class: 'sec', onclick: chiudiSheet }, 'Chiudi'))) },
+    h('div', { class: 'testa' }, h('b', {}, v.cliente || v.lavoro), chip(v.stato)),
+    v.nome ? h('div', { class: 'sub' }, v.nome) : null,
+    h('div', { class: 'tempo' }, tempo),
+    h('div', { class: 'vis' }, 'di ' + v.utente));
+}
+/** Scelta di chi può vedere l'attività (oltre a chi la inserisce). valore(): '' | '*' | [nomi] */
+function sceltaVisibilita(iniziale) {
+  const t = visTesto(iniziale), colleghi = (S.dati && S.dati.colleghi) || [];
+  const modo0 = t === '' ? 'solo' : t === '*' ? 'tutti' : 'alcuni';
+  const sel0 = t && t !== '*' ? t.split(';') : [];
+  const rs = h('input', { type: 'radio', name: 'vis', value: 'solo', checked: modo0 === 'solo' });
+  const rt = h('input', { type: 'radio', name: 'vis', value: 'tutti', checked: modo0 === 'tutti' });
+  const ra = h('input', { type: 'radio', name: 'vis', value: 'alcuni', checked: modo0 === 'alcuni' });
+  const checks = colleghi.map(n => h('input', { type: 'checkbox', value: n, checked: sel0.indexOf(n) >= 0 }));
+  const lista = h('div', { class: 'vis-lista', hidden: modo0 !== 'alcuni' }, colleghi.length ? colleghi.map((n, i) => h('label', { class: 'spunta' }, checks[i], n)) : h('div', { class: 'aiuto' }, 'Nessun altro utente attivo.'));
+  [rs, rt, ra].forEach(r => r.addEventListener('change', () => { lista.hidden = !ra.checked; }));
+  const el = h('div', { class: 'vis-box' }, h('label', {}, 'Chi può vedere questa attività oltre a te?'),
+    h('div', { class: 'radio vert' }, h('label', {}, rs, 'Solo io'), h('label', {}, rt, 'Tutti gli utenti'), h('label', {}, ra, 'Solo alcuni utenti')), lista);
+  return { el: el, valore: () => (rt.checked ? '*' : ra.checked ? checks.filter(c => c.checked).map(c => c.value) : '') };
+}
+function apriVisibilita(v) {
+  const sc = sceltaVisibilita(v.visibileA);
+  sheet('Visibilità nel calendario', (v.cliente || v.lavoro) + ' · ' + v.data,
+    h('div', {}, sc.el, h('button', { class: 'pieno', onclick: async () => {
+      const val = sc.valore();
+      if (Array.isArray(val) && !val.length) { avviso('Scegli almeno un utente, oppure "Solo io"', true); return; }
+      chiudiSheet();
+      const r = await eseguiOp('calVisibilita', { voce: v.id, visibileA: val });
+      if (r.esito === 'errore') avviso(r.errore, true); else avviso(r.esito === 'coda' ? 'Salvato sul telefono: verrà inviato appena c\'è connessione' : 'Visibilità aggiornata');
+      if (S.cal.utente) { try { S.vociAltro = (await chiama('calendario', { perConto: '*' })).voci; } catch (e) { /* ignora */ } }
+      disegnaCalendario();
+    } }, 'Salva')));
 }
 
 function apriAggiungi(g) {
@@ -540,13 +588,18 @@ function apriAggiungi(g) {
   const op = d.lavori.map(l => [l.etichetta, l.etichetta]);
   const lav = selezioneConFiltro(op, (op[0] || [''])[0]);
   const dG = dmy(g);
+  const vis = sceltaVisibilita(leggi('ultime', {}).vis);
   const corpo = h('div', {},
     campo('Cliente | Lavoro', lav.el),
+    vis.el,
     h('button', { class: 'pieno', onclick: async () => {
       if (!lav.sel.value) { avviso('Scegli il cliente / lavoro', true); return; }
       const perConto = S.cal.utente || '';
+      const visibileA = vis.valore();
+      if (Array.isArray(visibileA) && !visibileA.length) { avviso('Scegli almeno un utente, oppure "Solo io"', true); return; }
+      scrivi('ultime', Object.assign(leggi('ultime', {}), { vis: visibileA }));
       chiudiSheet();
-      const r = await eseguiOp('calAggiungi', { data: dG, lavoro: lav.sel.value, perConto: perConto });
+      const r = await eseguiOp('calAggiungi', { data: dG, lavoro: lav.sel.value, perConto: perConto, visibileA: visibileA });
       if (r.esito === 'errore') avviso(r.errore, true);
       else {
         if (perConto) { try { S.vociAltro = (await chiama('calendario', { perConto: '*' })).voci; } catch (e) { /* ignora */ } }
@@ -554,7 +607,7 @@ function apriAggiungi(g) {
       }
       disegnaCalendario();
     } }, ico('plus'), 'Aggiungi al ' + dG),
-    h('button', { class: 'sec', onclick: () => { chiudiSheet(); vai(vistaClienti, { tab: 'nuovo', calendario: dG }); } }, 'Cliente o lavoro non presente? Registra nuovo'));
+    h('button', { class: 'sec', onclick: () => { const v2 = vis.valore(); chiudiSheet(); vai(vistaClienti, { tab: 'nuovo', calendario: dG, visibileA: Array.isArray(v2) && !v2.length ? '' : v2 }); } }, 'Cliente o lavoro non presente? Registra nuovo'));
   sheet('Aggiungi al calendario', 'Giorno ' + dG, corpo);
 }
 
@@ -569,6 +622,9 @@ function apriMenuVoce(v) {
     corpo.append(h('button', { class: 'az ferma', disabled: v.stato !== 'IN_CORSO', onclick: () => { chiudiSheet(); apriFine(v); } }, ico('stop'),
       h('div', {}, 'Registra orario fine lavoro', h('small', {}, v.stato === 'IN_CORSO' ? 'Ora attuale oppure un altro orario dello stesso giorno' : 'Prima registra l\'inizio'))));
     corpo.append(h('button', { class: 'az', disabled: v.stato !== 'BOZZA', onclick: () => { chiudiSheet(); vai(vistaBozza, v.id); } }, ico('rapportini'), h('div', {}, 'Completa rapportino', h('small', {}, v.stato === 'BOZZA' ? 'Apre la bozza nella sezione Rapportini' : v.stato === 'INVIATO' ? 'Già inviato' : 'Disponibile dopo inizio e fine lavoro'))));
+  }
+  if ((mio || master) && v.stato !== 'INVIATO') {
+    corpo.append(h('button', { class: 'az', onclick: () => { chiudiSheet(); apriVisibilita(v); } }, ico('clienti'), h('div', {}, 'Chi può vedere questa attività', h('small', {}, 'Ora visibile a: ' + descVis(v.visibileA)))));
   }
   if (master && v.stato !== 'INVIATO') {
     corpo.append(h('button', { class: 'az', onclick: () => { chiudiSheet(); apriOrariMaster(v); } }, ico('matita'), h('div', {}, 'Imposta orari (solo master)', h('small', {}, 'Inserisce inizio e fine di un giorno qualsiasi'))));
@@ -950,7 +1006,7 @@ function corpoNuovo(opz) {
     const payload = {
       nuovo: nuovo, cliente: nuovo ? '' : selCli.value, nome: nome.value.trim(), sede: sede.value.trim(), ubicDiversa: diversa.checked, ubic: ubic.value.trim(),
       cf: cf.value.trim().toUpperCase(), piva: piva.value.trim(), t1: t1.value.trim(), t2: t2.value.trim(), t3: t3.value.trim(), email: email.value.trim(),
-      tipologia: tipologia.value, descr: descr.value.trim(), ubicLavoro: ubicLav.value.trim(), sopralluogo: sopralluogo, calendario: opz.calendario || ''
+      tipologia: tipologia.value, descr: descr.value.trim(), ubicLavoro: ubicLav.value.trim(), sopralluogo: sopralluogo, calendario: opz.calendario || '', visibileA: opz.visibileA || ''
     };
     invia.disabled = true; invia.textContent = 'Invio…';
     const r = await eseguiOp('cliente', payload);
@@ -1021,6 +1077,7 @@ function descrizione(it) {
     case 'rapportino': return '📝 Invio rapportino · ' + nomeV();
     case 'bozzaSalva': return '💾 Salvataggio bozza · ' + nomeV();
     case 'calAggiungi': return '📅 Calendario: aggiunta · ' + p.lavoro + ' · ' + p.data;
+    case 'calVisibilita': return '👁 Visibilità calendario · ' + nomeV();
     case 'calElimina': return '📅 Calendario: eliminazione · ' + nomeV();
     case 'calInizio': return '▶ Inizio lavoro ' + hhmm(it.creatoIl) + ' · ' + nomeV();
     case 'calFine': return '■ Fine lavoro ' + (p.modo === 'ALTRO' ? p.ora : hhmm(it.creatoIl)) + ' · ' + nomeV();
@@ -1082,7 +1139,7 @@ async function avvio() {
 
   S.token = leggi('tk', null); S.tokenExp = S.token ? jwtScadenza(S.token) : 0;
   let cache = null;
-  try { cache = await DB.getKV('sessione'); S.anag = (await DB.getKV('anagrafica')) || []; S.vociBase = (await DB.getKV('vociBase')) || []; } catch (e) { /* ignora */ }
+  try { cache = await DB.getKV('sessione'); S.anag = (await DB.getKV('anagrafica')) || []; S.vociBase = (await DB.getKV('vociBase')) || []; S.condivise = (await DB.getKV('condivise')) || []; } catch (e) { /* ignora */ }
   await aggiornaStato();
   attendiGoogle(6000).then(ok => { if (ok) inizializzaGoogle(); });
   if (cache && cache.utente) {
