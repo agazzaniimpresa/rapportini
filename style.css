@@ -163,3 +163,12 @@ details.cli[open] summary { border-bottom: 1px solid #eef1f7; }
 #avviso { position: fixed; left: 12px; right: 12px; bottom: calc(14px + env(safe-area-inset-bottom)); background: #0f172a; color: #fff; padding: 13px 15px; border-radius: 12px; z-index: 40; font-size: .95rem; box-shadow: 0 8px 24px rgba(0, 0, 0, .3); }
 #avviso.errore { background: var(--errore); }
 #avviso[hidden] { display: none; }
+
+/* v5.1 - programma condiviso */
+.voce .vis { margin-top: 5px; font-size: .8rem; color: var(--muto); }
+.voce.condivisa { border-left-color: #818cf8; background: #f5f7ff; }
+.sez-cond { margin: 18px 2px 4px; font-size: .95rem; color: var(--blu-scuro); }
+.radio.vert label { flex: 1 1 100%; }
+.vis-box { margin: 10px 0 4px; }
+.vis-lista { margin-top: 8px; padding: 8px 10px; border: 1px solid #cdd5e4; border-radius: 12px; background: #fff; max-height: 180px; overflow: auto; }
+.vis-lista .spunta { display: flex; align-items: center; gap: 8px; margin: 6px 0; }
